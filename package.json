@@ -1,0 +1,17 @@
+{
+  "name": "@ryvra/asset-registry",
+  "version": "0.1.0",
+  "description": "Ryvra Protocol asset registry baseline",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "lint": "tsc --noEmit --pretty false",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  }
+}
