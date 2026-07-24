@@ -1,9 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { InMemoryAssetRegistry, validateAssetDefinition, type AssetDefinition } from '../src/index.js';
+import {
+  InMemoryAssetRegistry,
+  validateAssetDefinition,
+  type AssetDefinition,
+  type RegistryEvent,
+  type ValuationSource
+} from '../src/index.js';
 
 describe('asset schema baseline', () => {
   const usdc: AssetDefinition = {
     asset_id: 'asset:stablecoin:usdc:ethereum',
+    reference_id: 'ref:asset:stablecoin:usdc:ethereum',
+    correlation_id: 'corr:asset-registry:onboard:usdc',
+    policy_version: 'policy.asset-registry.2026-07',
     symbol: 'USDC',
     name: 'USD Coin',
     asset_class: 'stablecoin',
@@ -11,7 +20,6 @@ describe('asset schema baseline', () => {
     chain_id: '1',
     contract_address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
     decimals: 6,
-    valuation_source_id: 'vs:usd-stablecoin-basket',
     liquidity_tier: 'tier-1',
     risk_weight: 'TBD by governance/policy',
     settlement_constraints: 'TBD by governance/policy',
@@ -31,5 +39,59 @@ describe('asset schema baseline', () => {
 
     expect(registry.getById(usdc.asset_id)).toEqual(usdc);
     expect(registry.list()).toHaveLength(1);
+  });
+
+  it('enforces canonical reference and policy fields', () => {
+    const result = validateAssetDefinition({
+      ...usdc,
+      reference_id: '',
+      correlation_id: '',
+      policy_version: ''
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain('reference_id is required');
+    expect(result.errors).toContain('correlation_id is required');
+    expect(result.errors).toContain('policy_version is required');
+  });
+
+  it('matches canonical valuation source naming', () => {
+    const valuationSource: ValuationSource = {
+      reference_id: 'ref:valuation:usd-stablecoin-basket',
+      correlation_id: 'corr:valuation:source:seed',
+      source_type: 'index',
+      freshness_threshold: 'PT30S',
+      confidence_score: '0.99',
+      fallback_order: ['ref:valuation:fallback-1']
+    };
+
+    expect(Object.keys(valuationSource)).toEqual([
+      'reference_id',
+      'correlation_id',
+      'source_type',
+      'freshness_threshold',
+      'confidence_score',
+      'fallback_order'
+    ]);
+  });
+
+  it('matches canonical event envelope fields', () => {
+    const event: RegistryEvent<{ asset_id: string }> = {
+      event_id: 'event:asset:upserted:1',
+      correlation_id: 'corr:asset-registry:onboard:usdc',
+      reference_id: 'ref:asset:stablecoin:usdc:ethereum',
+      event_type: 'asset.upserted',
+      timestamp: '2026-07-24T00:00:00.000Z',
+      payload: { asset_id: usdc.asset_id }
+    };
+
+    expect(Object.keys(event)).toEqual([
+      'event_id',
+      'correlation_id',
+      'reference_id',
+      'event_type',
+      'timestamp',
+      'payload'
+    ]);
   });
 });

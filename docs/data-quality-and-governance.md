@@ -44,5 +44,5 @@ Emergency authority boundaries are TBD by governance/policy.
 ## Governance notes and policy versioning
 
 - Governance policies are versioned independently from schema versions.
-- Every asset update must reference the effective policy version.
+- Every asset update must reference the effective `policy_version`.
 - Non-final policy parameters remain explicitly marked as TBD by governance/policy.

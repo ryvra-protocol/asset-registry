@@ -7,7 +7,8 @@ Draft. Not production-ready.
 
 Each valuation source includes:
 
-- `source_id`
+- `reference_id`
+- `correlation_id`
 - `source_type` (`oracle | exchange | index`)
 - freshness thresholds
 - confidence scoring
@@ -15,7 +16,8 @@ Each valuation source includes:
 
 ### Field guidance
 
-- `source_id`: unique identifier for valuation source definition.
+- `reference_id`: canonical reference identifier for valuation source definition.
+- `correlation_id`: canonical correlation identifier for valuation source workflows.
 - `source_type`: classification of source mechanism (`oracle`, `exchange`, `index`).
 - freshness thresholds: max allowable quote age per asset or source tier (TBD by governance/policy).
 - confidence scoring: normalized confidence metric and interpretation rules (TBD by governance/policy).
