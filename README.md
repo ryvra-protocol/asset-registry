@@ -8,6 +8,10 @@ It provides a shared baseline for:
 - valuation source references
 - risk and settlement attributes
 
+Canonical contract vocabulary aligned with protocol-core hardening baseline:
+- `asset_id`, `reference_id`, `correlation_id`, `policy_version`
+- event envelope fields: `event_id`, `correlation_id`, `reference_id`, `event_type`, `timestamp`, `payload`
+
 Status: **early draft / not production-ready**.
 
 ## Module boundaries

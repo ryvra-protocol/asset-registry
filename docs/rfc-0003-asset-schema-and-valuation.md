@@ -15,7 +15,9 @@ Each asset record must include:
 - `chain_id`
 - `contract_address`
 - `decimals`
-- `valuation_source_id`
+- `reference_id`
+- `correlation_id`
+- `policy_version`
 - `liquidity_tier`
 - `risk_weight`
 - `settlement_constraints`
@@ -32,7 +34,9 @@ Each asset record must include:
 - `chain_id`: network identifier where applicable; non-chain assets use policy placeholder values (TBD by governance/policy).
 - `contract_address`: on-chain address where applicable; off-chain assets use policy placeholder values (TBD by governance/policy).
 - `decimals`: integer precision value.
-- `valuation_source_id`: foreign key to valuation source catalog.
+- `reference_id`: canonical reference identifier for related valuation/catalog records.
+- `correlation_id`: canonical correlation identifier for cross-service workflows/audit traces.
+- `policy_version`: effective governance/policy version used for review and decisioning.
 - `liquidity_tier`: normalized tier label and mapping (TBD by governance/policy).
 - `risk_weight`: normalized risk factor and bounds (TBD by governance/policy).
 - `settlement_constraints`: structured settlement rules and restrictions.
@@ -46,7 +50,9 @@ Each asset record must include:
 - `symbol` collisions across asset classes require explicit governance exception handling (TBD by governance/policy).
 - `decimals` must be a non-negative integer.
 - `risk_weight` bounds and units are policy-defined (TBD by governance/policy).
-- `valuation_source_id` must reference an approved source.
+- `reference_id` must reference an approved source.
+- `correlation_id` must be present for workflow traceability.
+- `policy_version` must reference an approved governance/policy release.
 - `status` must be one of lifecycle states defined below.
 - `version` must be monotonically increasing for updates to the same logical `asset_id`.
 
@@ -84,12 +90,14 @@ State transition exceptions are controlled by governance and emergency procedure
   "chain_id": "1",
   "contract_address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
   "decimals": 6,
-  "valuation_source_id": "vs:usd-stablecoin-basket",
+  "reference_id": "ref:valuation:usd-stablecoin-basket",
+  "correlation_id": "corr:asset-registry:onboard:usdc",
   "liquidity_tier": "tier-1",
   "risk_weight": "TBD by governance/policy",
   "settlement_constraints": "TBD by governance/policy",
   "status": "active",
-  "version": "1.0.0"
+  "version": "1.0.0",
+  "policy_version": "policy.asset-registry.2026-07"
 }
 ```
 
@@ -105,12 +113,14 @@ State transition exceptions are controlled by governance and emergency procedure
   "chain_id": "bitcoin",
   "contract_address": "TBD by governance/policy",
   "decimals": 8,
-  "valuation_source_id": "vs:btc-usd-composite",
+  "reference_id": "ref:valuation:btc-usd-composite",
+  "correlation_id": "corr:asset-registry:onboard:btc",
   "liquidity_tier": "tier-1",
   "risk_weight": "TBD by governance/policy",
   "settlement_constraints": "TBD by governance/policy",
   "status": "active",
-  "version": "1.0.0"
+  "version": "1.0.0",
+  "policy_version": "policy.asset-registry.2026-07"
 }
 ```
 
@@ -126,12 +136,14 @@ State transition exceptions are controlled by governance and emergency procedure
   "chain_id": "1",
   "contract_address": "TBD by governance/policy",
   "decimals": 6,
-  "valuation_source_id": "vs:tbill-index",
+  "reference_id": "ref:valuation:tbill-index",
+  "correlation_id": "corr:asset-registry:onboard:ustb",
   "liquidity_tier": "tier-2",
   "risk_weight": "TBD by governance/policy",
   "settlement_constraints": "TBD by governance/policy",
   "status": "proposed",
-  "version": "1.0.0"
+  "version": "1.0.0",
+  "policy_version": "policy.asset-registry.2026-07"
 }
 ```
 
@@ -147,12 +159,14 @@ State transition exceptions are controlled by governance and emergency procedure
   "chain_id": "1",
   "contract_address": "TBD by governance/policy",
   "decimals": 6,
-  "valuation_source_id": "vs:xau-usd-index",
+  "reference_id": "ref:valuation:xau-usd-index",
+  "correlation_id": "corr:asset-registry:onboard:xaut",
   "liquidity_tier": "tier-2",
   "risk_weight": "TBD by governance/policy",
   "settlement_constraints": "TBD by governance/policy",
   "status": "proposed",
-  "version": "1.0.0"
+  "version": "1.0.0",
+  "policy_version": "policy.asset-registry.2026-07"
 }
 ```
 
@@ -168,11 +182,13 @@ State transition exceptions are controlled by governance and emergency procedure
   "chain_id": "1",
   "contract_address": "TBD by governance/policy",
   "decimals": 6,
-  "valuation_source_id": "vs:aapl-nbbo-index",
+  "reference_id": "ref:valuation:aapl-nbbo-index",
+  "correlation_id": "corr:asset-registry:onboard:aapl",
   "liquidity_tier": "tier-2",
   "risk_weight": "TBD by governance/policy",
   "settlement_constraints": "TBD by governance/policy",
   "status": "proposed",
-  "version": "1.0.0"
+  "version": "1.0.0",
+  "policy_version": "policy.asset-registry.2026-07"
 }
 ```

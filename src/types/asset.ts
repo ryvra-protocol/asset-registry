@@ -1,8 +1,10 @@
+import type { CanonicalPolicyFields, CanonicalReferenceFields } from '../contracts/compatibility.js';
+
 export type AssetClass = 'stablecoin' | 'crypto' | 'rwa' | 'stock' | 'metal';
 
 export type AssetStatus = 'proposed' | 'active' | 'restricted' | 'disabled';
 
-export interface AssetDefinition {
+export interface AssetDefinition extends CanonicalReferenceFields, CanonicalPolicyFields {
   asset_id: string;
   symbol: string;
   name: string;
@@ -11,7 +13,6 @@ export interface AssetDefinition {
   chain_id: string;
   contract_address: string;
   decimals: number;
-  valuation_source_id: string;
   liquidity_tier: string;
   risk_weight: string;
   settlement_constraints: string;
