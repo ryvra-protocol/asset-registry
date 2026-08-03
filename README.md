@@ -25,8 +25,13 @@ The public registry surface includes deterministic reference normalization and c
 - `resolveAsset(assetRef)`
 - `getAssetMetadata(assetId)`
 - `isSupportedAsset(assetId, chainId)`
+- `getAaAssetCapabilities(assetId, chainId)`
+- `isSponsorEligible(assetId, chainId, policyContext)`
+- `validateUserOpTransferCompatibility(assetId, chainId, transferDecimals, transferUnit)`
 
 Typed error classes are exported for invalid, unresolved, mismatched, and decimals-conflict references.
+
+PR8-specific scope in this package is metadata and validation only; runtime bundler/paymaster orchestration and market flow logic remain out of scope.
 
 ## Primary consumers
 
