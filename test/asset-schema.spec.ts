@@ -1,32 +1,38 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
+  AssetDecimalsMismatchError,
   InMemoryAssetRegistry,
+  InvalidAssetReferenceError,
+  MismatchedAssetError,
+  UnresolvedAssetError,
   validateAssetDefinition,
   type AssetDefinition,
   type RegistryEvent,
   type ValuationSource
 } from '../src/index.js';
 
-describe('asset schema baseline', () => {
-  const usdc: AssetDefinition = {
-    asset_id: 'asset:stablecoin:usdc:ethereum',
-    reference_id: 'ref:asset:stablecoin:usdc:ethereum',
-    correlation_id: 'corr:asset-registry:onboard:usdc',
-    policy_version: 'policy.asset-registry.2026-07',
-    symbol: 'USDC',
-    name: 'USD Coin',
-    asset_class: 'stablecoin',
-    issuer: 'Circle',
-    chain_id: '1',
-    contract_address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-    decimals: 6,
-    liquidity_tier: 'tier-1',
-    risk_weight: 'TBD by governance/policy',
-    settlement_constraints: 'TBD by governance/policy',
-    status: 'active',
-    version: '1.0.0'
-  };
+const usdc: AssetDefinition = {
+  asset_id: 'asset:stablecoin:usdc:ethereum',
+  reference_id: 'ref:asset:stablecoin:usdc:ethereum',
+  correlation_id: 'corr:asset-registry:onboard:usdc',
+  policy_version: 'policy.asset-registry.2026-07',
+  symbol: 'USDC',
+  name: 'USD Coin',
+  asset_class: 'stablecoin',
+  issuer: 'Circle',
+  chain_id: '1',
+  contract_address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+  decimals: 6,
+  liquidity_tier: 'tier-1',
+  risk_weight: 'TBD by governance/policy',
+  settlement_constraints: 'TBD by governance/policy',
+  status: 'active',
+  version: '1.0.0'
+};
 
+describe('asset schema baseline', () => {
   it('validates a basic asset definition shape', () => {
     const result = validateAssetDefinition(usdc);
     expect(result.valid).toBe(true);
@@ -93,5 +99,71 @@ describe('asset schema baseline', () => {
       'timestamp',
       'payload'
     ]);
+  });
+});
+
+describe('canonical asset resolution surface', () => {
+  it('produces deterministic normalization using golden outputs', () => {
+    const registry = new InMemoryAssetRegistry();
+    const goldenPath = fileURLToPath(new URL('./fixtures/normalization-golden.json', import.meta.url));
+    const cases: Array<{ chainId: string; tokenRef: string; normalized: string }> = JSON.parse(
+      readFileSync(goldenPath, 'utf8')
+    );
+
+    const outputs = cases.map((item) => registry.normalizeAssetRef(item.chainId, item.tokenRef));
+    expect(outputs).toEqual(cases.map((item) => item.normalized));
+  });
+
+  it('resolves by canonical APIs and reports support by chain', () => {
+    const registry = new InMemoryAssetRegistry();
+    registry.upsert(usdc);
+
+    expect(registry.getAssetMetadata(usdc.asset_id)).toEqual(usdc);
+    expect(
+      registry.resolveAsset({
+        chainId: '1',
+        tokenRef: '0xA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48'
+      })
+    ).toEqual(usdc);
+    expect(registry.resolveAsset({ assetId: usdc.asset_id })).toEqual(usdc);
+    expect(registry.isSupportedAsset(usdc.asset_id, '1')).toBe(true);
+    expect(registry.isSupportedAsset(usdc.asset_id, '10')).toBe(false);
+  });
+
+  it('throws typed errors for unresolved and invalid references', () => {
+    const registry = new InMemoryAssetRegistry();
+
+    expect(() => registry.getAssetMetadata('')).toThrow(InvalidAssetReferenceError);
+    expect(() => registry.resolveAsset('asset:missing')).toThrow(UnresolvedAssetError);
+    expect(() => registry.resolveAsset({ chainId: '', tokenRef: 'USDC' })).toThrow(
+      InvalidAssetReferenceError
+    );
+  });
+
+  it('throws typed mismatched and decimals consistency errors', () => {
+    const registry = new InMemoryAssetRegistry();
+    registry.upsert(usdc);
+
+    expect(() =>
+      registry.resolveAsset({
+        assetId: usdc.asset_id,
+        tokenRef: '0x0000000000000000000000000000000000000001'
+      })
+    ).toThrow(MismatchedAssetError);
+
+    expect(() =>
+      registry.upsert({
+        ...usdc,
+        asset_id: 'asset:stablecoin:usdc-clone:ethereum',
+        symbol: 'USDCX'
+      })
+    ).toThrow(MismatchedAssetError);
+
+    expect(() =>
+      registry.upsert({
+        ...usdc,
+        decimals: 18
+      })
+    ).toThrow(AssetDecimalsMismatchError);
   });
 });

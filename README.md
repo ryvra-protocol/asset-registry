@@ -18,6 +18,16 @@ Status: **early draft / not production-ready**.
 
 This repository defines and validates asset and valuation metadata contracts. It does **not** implement execution, custody, or market making logic.
 
+## Canonical registry API surface
+
+The public registry surface includes deterministic reference normalization and canonical resolution APIs:
+- `normalizeAssetRef(chainId, tokenRef)`
+- `resolveAsset(assetRef)`
+- `getAssetMetadata(assetId)`
+- `isSupportedAsset(assetId, chainId)`
+
+Typed error classes are exported for invalid, unresolved, mismatched, and decimals-conflict references.
+
 ## Primary consumers
 
 - `accounts`

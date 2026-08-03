@@ -1,0 +1,22 @@
+[
+  {
+    "chainId": "1",
+    "tokenRef": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+    "normalized": "1:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+  },
+  {
+    "chainId": " 1 ",
+    "tokenRef": "  0xA0B86991C6218B36C1D19D4A2E9EB0CE3606EB48 ",
+    "normalized": "1:0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+  },
+  {
+    "chainId": "ethereum",
+    "tokenRef": "USDC",
+    "normalized": "ethereum:usdc"
+  },
+  {
+    "chainId": " Solana ",
+    "tokenRef": "So11111111111111111111111111111111111111112",
+    "normalized": "solana:so11111111111111111111111111111111111111112"
+  }
+]

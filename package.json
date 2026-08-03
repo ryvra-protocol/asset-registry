@@ -8,6 +8,7 @@
   "scripts": {
     "lint": "tsc --noEmit --pretty false",
     "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.json",
     "test": "vitest run"
   },
   "devDependencies": {
