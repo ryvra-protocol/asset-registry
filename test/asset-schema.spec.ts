@@ -2,7 +2,9 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
+  AssetAaCompatibilityError,
   AssetDecimalsMismatchError,
+  AssetUnitMismatchError,
   InMemoryAssetRegistry,
   InvalidAssetReferenceError,
   MismatchedAssetError,
@@ -29,7 +31,19 @@ const usdc: AssetDefinition = {
   risk_weight: 'TBD by governance/policy',
   settlement_constraints: 'TBD by governance/policy',
   status: 'active',
-  version: '1.0.0'
+  version: '1.0.0',
+  account_abstraction: {
+    compatible: true,
+    gas_token_capable: true,
+    transfer_unit: 'base-10',
+    sponsorship: {
+      eligible: true,
+      required_policy_version: 'policy.asset-registry.2026-07',
+      allowed_sponsors: ['sponsor:trusted'],
+      denied_sponsors: ['sponsor:blocked'],
+      required_context_flags: ['kyc_passed']
+    }
+  }
 };
 
 describe('asset schema baseline', () => {
@@ -155,7 +169,10 @@ describe('canonical asset resolution surface', () => {
       registry.upsert({
         ...usdc,
         asset_id: 'asset:stablecoin:usdc-clone:ethereum',
-        symbol: 'USDCX'
+        symbol: 'USDCX',
+        account_abstraction: {
+          ...usdc.account_abstraction!
+        }
       })
     ).toThrow(MismatchedAssetError);
 
@@ -165,5 +182,91 @@ describe('canonical asset resolution surface', () => {
         decimals: 18
       })
     ).toThrow(AssetDecimalsMismatchError);
+  });
+});
+
+describe('erc-4337 compatibility surface', () => {
+  it('returns deterministic AA capabilities', () => {
+    const registry = new InMemoryAssetRegistry();
+    registry.upsert(usdc);
+
+    expect(registry.getAaAssetCapabilities(usdc.asset_id, '1')).toEqual({
+      compatible: true,
+      gas_token_capable: true,
+      transfer_unit: 'base-10',
+      sponsorship: {
+        eligible: true,
+        required_policy_version: 'policy.asset-registry.2026-07',
+        allowed_sponsors: ['sponsor:trusted'],
+        denied_sponsors: ['sponsor:blocked'],
+        required_context_flags: ['kyc_passed']
+      }
+    });
+  });
+
+  it('resolves sponsor eligibility deterministically from metadata hooks', () => {
+    const registry = new InMemoryAssetRegistry();
+    registry.upsert(usdc);
+
+    expect(
+      registry.isSponsorEligible(usdc.asset_id, '1', {
+        policyVersion: 'policy.asset-registry.2026-07',
+        sponsorId: 'sponsor:trusted',
+        flags: { kyc_passed: true }
+      })
+    ).toBe(true);
+
+    expect(
+      registry.isSponsorEligible(usdc.asset_id, '1', {
+        policyVersion: 'policy.asset-registry.2026-07',
+        sponsorId: 'sponsor:blocked',
+        flags: { kyc_passed: true }
+      })
+    ).toBe(false);
+
+    expect(
+      registry.isSponsorEligible(usdc.asset_id, '1', {
+        policyVersion: 'policy.asset-registry.2026-07',
+        sponsorId: 'sponsor:trusted',
+        flags: { kyc_passed: false }
+      })
+    ).toBe(false);
+  });
+
+  it('enforces strict UserOp decimals and unit compatibility', () => {
+    const registry = new InMemoryAssetRegistry();
+    registry.upsert(usdc);
+
+    expect(() =>
+      registry.validateUserOpTransferCompatibility(usdc.asset_id, '1', 6, 'base-10')
+    ).not.toThrow();
+    expect(() =>
+      registry.validateUserOpTransferCompatibility(usdc.asset_id, '1', 18, 'base-10')
+    ).toThrow(AssetDecimalsMismatchError);
+    expect(() =>
+      registry.validateUserOpTransferCompatibility(usdc.asset_id, '1', 6, 'atom')
+    ).toThrow(AssetUnitMismatchError);
+  });
+
+  it('fails UserOp compatibility checks when AA is disabled', () => {
+    const registry = new InMemoryAssetRegistry();
+    registry.upsert({
+      ...usdc,
+      asset_id: 'asset:stablecoin:usdc:no-aa',
+      symbol: 'USDCN',
+      contract_address: '0x00000000000000000000000000000000000000aa',
+      account_abstraction: {
+        compatible: false,
+        gas_token_capable: false,
+        transfer_unit: 'base-10',
+        sponsorship: {
+          eligible: false
+        }
+      }
+    });
+
+    expect(() =>
+      registry.validateUserOpTransferCompatibility('asset:stablecoin:usdc:no-aa', '1', 6, 'base-10')
+    ).toThrow(AssetAaCompatibilityError);
   });
 });

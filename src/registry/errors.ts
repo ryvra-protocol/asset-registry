@@ -32,3 +32,17 @@ export class AssetDecimalsMismatchError extends MismatchedAssetError {
     this.name = 'AssetDecimalsMismatchError';
   }
 }
+
+export class AssetUnitMismatchError extends MismatchedAssetError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AssetUnitMismatchError';
+  }
+}
+
+export class AssetAaCompatibilityError extends MismatchedAssetError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AssetAaCompatibilityError';
+  }
+}
