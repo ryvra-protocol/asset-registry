@@ -1,5 +1,5 @@
 export { InMemoryAssetRegistry } from './in-memory-registry.js';
-export type { AaAssetCapabilities } from './in-memory-registry.js';
+export type { AaAssetCapabilities, PrivacyCapabilityQuery } from './in-memory-registry.js';
 export { normalizeAssetRef, isAssetIdentityRef, isAssetLocator } from './asset-resolution.js';
 export type { AssetRef, AssetIdentityRef, AssetLocator } from './asset-resolution.js';
 export {
