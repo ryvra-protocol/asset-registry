@@ -1,5 +1,8 @@
 import type {
+  AssetChainSupport,
   AssetDefinition,
+  OracleSourceProfile,
+  PrivacyMode,
   SponsorshipPolicyContext
 } from '../types/asset.js';
 import {
@@ -30,6 +33,11 @@ export interface AaAssetCapabilities {
   };
 }
 
+export interface PrivacyCapabilityQuery {
+  mode?: PrivacyMode;
+  confidential_compute_supported?: boolean;
+}
+
 export class InMemoryAssetRegistry {
   private readonly assets = new Map<string, AssetDefinition>();
 
@@ -37,46 +45,40 @@ export class InMemoryAssetRegistry {
 
   private readonly decimalsByNormalizedRef = new Map<string, number>();
 
+  private readonly normalizedRefsByAssetId = new Map<string, string[]>();
+
   upsert(asset: AssetDefinition): void {
-    const normalizedRef = this.normalizeAssetRef(asset.chain_id, asset.contract_address);
-    const existingAssetByRef = this.assetIdsByNormalizedRef.get(normalizedRef);
-
-    if (existingAssetByRef && existingAssetByRef !== asset.asset_id) {
-      throw new MismatchedAssetError(
-        `normalized asset reference ${normalizedRef} already maps to asset_id ${existingAssetByRef}`
-      );
-    }
-
-    const existingDecimalsByRef = this.decimalsByNormalizedRef.get(normalizedRef);
-    if (existingDecimalsByRef !== undefined && existingDecimalsByRef !== asset.decimals) {
-      throw new AssetDecimalsMismatchError(
-        `decimals mismatch for ${normalizedRef}: expected ${existingDecimalsByRef}, received ${asset.decimals}`
-      );
-    }
-
     const existingAssetById = this.assets.get(asset.asset_id);
-    if (existingAssetById) {
-      const existingNormalizedRef = this.normalizeAssetRef(
-        existingAssetById.chain_id,
-        existingAssetById.contract_address
-      );
-
-      if (existingNormalizedRef !== normalizedRef) {
+    const nextRefs = this.collectNormalizedRefs(asset);
+    for (const normalizedRef of nextRefs) {
+      const existingAssetByRef = this.assetIdsByNormalizedRef.get(normalizedRef);
+      if (existingAssetByRef && existingAssetByRef !== asset.asset_id) {
         throw new MismatchedAssetError(
-          `asset_id ${asset.asset_id} is already mapped to ${existingNormalizedRef}, received ${normalizedRef}`
+          `normalized asset reference ${normalizedRef} already maps to asset_id ${existingAssetByRef}`
         );
       }
 
-      if (existingAssetById.decimals !== asset.decimals) {
+      const existingDecimalsByRef = this.decimalsByNormalizedRef.get(normalizedRef);
+      if (existingDecimalsByRef !== undefined && existingDecimalsByRef !== asset.decimals) {
         throw new AssetDecimalsMismatchError(
-          `decimals mismatch for asset_id ${asset.asset_id}: expected ${existingAssetById.decimals}, received ${asset.decimals}`
+          `decimals mismatch for ${normalizedRef}: expected ${existingDecimalsByRef}, received ${asset.decimals}`
         );
       }
     }
 
+    if (existingAssetById && existingAssetById.decimals !== asset.decimals) {
+      throw new AssetDecimalsMismatchError(
+        `decimals mismatch for asset_id ${asset.asset_id}: expected ${existingAssetById.decimals}, received ${asset.decimals}`
+      );
+    }
+
+    this.clearNormalizedRefsForAsset(asset.asset_id);
     this.assets.set(asset.asset_id, asset);
-    this.assetIdsByNormalizedRef.set(normalizedRef, asset.asset_id);
-    this.decimalsByNormalizedRef.set(normalizedRef, asset.decimals);
+    this.normalizedRefsByAssetId.set(asset.asset_id, nextRefs);
+    for (const normalizedRef of nextRefs) {
+      this.assetIdsByNormalizedRef.set(normalizedRef, asset.asset_id);
+      this.decimalsByNormalizedRef.set(normalizedRef, asset.decimals);
+    }
   }
 
   getById(assetId: string): AssetDefinition | undefined {
@@ -160,7 +162,82 @@ export class InMemoryAssetRegistry {
       return false;
     }
 
+    if (asset.chain_support?.length) {
+      const normalizedChainId = chainId.trim().toLowerCase();
+      return asset.chain_support.some(
+        (item) => item.chain_id.trim().toLowerCase() === normalizedChainId && item.deploy_status !== 'disabled'
+      );
+    }
+
     return asset.chain_id.trim().toLowerCase() === chainId.trim().toLowerCase();
+  }
+
+  listByCollateralEligibility(eligible = true): AssetDefinition[] {
+    return this.list().filter((asset) => (asset.collateral?.eligible ?? false) === eligible);
+  }
+
+  listByMarginEligibility(eligible = true): AssetDefinition[] {
+    return this.list().filter((asset) => (asset.margin?.eligible ?? false) === eligible);
+  }
+
+  listByPrivacyCapability(query: PrivacyCapabilityQuery = {}): AssetDefinition[] {
+    return this.list().filter((asset) => {
+      if (!asset.privacy) {
+        return false;
+      }
+      if (query.mode && !asset.privacy.supported_modes.includes(query.mode)) {
+        return false;
+      }
+      if (
+        query.confidential_compute_supported !== undefined &&
+        (asset.confidential_compute?.supported ?? false) !== query.confidential_compute_supported
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }
+
+  listSupportedChains(assetId: string): AssetChainSupport[] {
+    const asset = this.getAssetMetadata(assetId);
+    if (asset.chain_support?.length) {
+      return asset.chain_support;
+    }
+    return [
+      {
+        chain_id: asset.chain_id,
+        contract_address: asset.contract_address,
+        deploy_status: asset.status === 'disabled' ? 'disabled' : 'supported',
+        settlement_supported: true,
+        finality_profile: asset.settlement?.finality_profile ?? 'probabilistic'
+      }
+    ];
+  }
+
+  getOracleSourceProfile(assetId: string): AssetDefinition['oracle'] {
+    return this.getAssetMetadata(assetId).oracle;
+  }
+
+  selectOracleSource(assetId: string, healthySourceIds?: string[]): OracleSourceProfile | undefined {
+    const oracle = this.getAssetMetadata(assetId).oracle;
+    if (!oracle) {
+      return undefined;
+    }
+
+    const healthySourceSet = healthySourceIds ? new Set(healthySourceIds) : undefined;
+    const byId = new Map(oracle.sources.map((source) => [source.source_id, source]));
+
+    for (const fallbackSourceId of oracle.fallback_order) {
+      if (healthySourceSet && !healthySourceSet.has(fallbackSourceId)) {
+        continue;
+      }
+      const matched = byId.get(fallbackSourceId);
+      if (matched) {
+        return matched;
+      }
+    }
+
+    return undefined;
   }
 
   getAaAssetCapabilities(assetId: string, chainId: string): AaAssetCapabilities {
@@ -253,11 +330,34 @@ export class InMemoryAssetRegistry {
       throw new InvalidAssetReferenceError('chainId must be a non-empty string');
     }
 
-    const assetChainId = asset.chain_id.trim().toLowerCase();
-    if (assetChainId !== normalizedChainId) {
+    const supportedChainIds = asset.chain_support?.length
+      ? asset.chain_support.map((item) => item.chain_id.trim().toLowerCase())
+      : [asset.chain_id.trim().toLowerCase()];
+    if (!supportedChainIds.includes(normalizedChainId)) {
       throw new MismatchedAssetError(
-        `asset_id ${asset.asset_id} belongs to chain ${assetChainId}, received ${normalizedChainId}`
+        `asset_id ${asset.asset_id} does not support chain ${normalizedChainId}`
       );
+    }
+  }
+
+  private collectNormalizedRefs(asset: AssetDefinition): string[] {
+    const refs = [this.normalizeAssetRef(asset.chain_id, asset.contract_address)];
+    for (const chainSupport of asset.chain_support ?? []) {
+      refs.push(this.normalizeAssetRef(chainSupport.chain_id, chainSupport.contract_address));
+    }
+
+    return refs;
+  }
+
+  private clearNormalizedRefsForAsset(assetId: string): void {
+    const existingRefs = this.normalizedRefsByAssetId.get(assetId);
+    if (!existingRefs) {
+      return;
+    }
+
+    for (const ref of existingRefs) {
+      this.assetIdsByNormalizedRef.delete(ref);
+      this.decimalsByNormalizedRef.delete(ref);
     }
   }
 }

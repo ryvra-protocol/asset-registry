@@ -32,6 +32,74 @@ const usdc: AssetDefinition = {
   settlement_constraints: 'TBD by governance/policy',
   status: 'active',
   version: '1.0.0',
+  risk: {
+    risk_class: 'low',
+    risk_tier: 'tier-1',
+    risk_score: 12
+  },
+  collateral: {
+    eligible: true,
+    haircut_bps: 500,
+    max_ltv_bps: 8500
+  },
+  margin: {
+    eligible: true,
+    max_leverage: 5,
+    initial_margin_bps: 2000,
+    maintenance_margin_bps: 1200,
+    liquidation_threshold_bps: 1050
+  },
+  oracle: {
+    sources: [
+      {
+        source_id: 'oracle:chainlink:usdc-usd',
+        source_type: 'oracle',
+        confidence: 0.99,
+        max_staleness_seconds: 60,
+        fallback_priority: 1
+      },
+      {
+        source_id: 'oracle:pyth:usdc-usd',
+        source_type: 'oracle',
+        confidence: 0.96,
+        max_staleness_seconds: 120,
+        fallback_priority: 2
+      }
+    ],
+    fallback_order: ['oracle:chainlink:usdc-usd', 'oracle:pyth:usdc-usd']
+  },
+  privacy: {
+    privacy_enabled: true,
+    supported_modes: ['public', 'shielded'],
+    default_mode: 'public'
+  },
+  confidential_compute: {
+    supported: true,
+    provider_compatibility: ['tee:intel-sgx', 'tee:amd-sev']
+  },
+  settlement: {
+    supports_settlement: true,
+    finality_profile: 'probabilistic',
+    finality_blocks: 12,
+    finality_seconds: 180
+  },
+  chain_support: [
+    {
+      chain_id: '1',
+      contract_address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+      deploy_status: 'supported',
+      settlement_supported: true,
+      finality_profile: 'probabilistic'
+    }
+  ],
+  metadata_audit_history: [
+    {
+      metadata_version: 'meta-1',
+      changed_at: '2026-07-24T00:00:00.000Z',
+      changed_by: 'governance:risk-council',
+      reason: 'initial RFC-0018 metadata publication'
+    }
+  ],
   account_abstraction: {
     compatible: true,
     gas_token_capable: true,
@@ -128,6 +196,13 @@ describe('canonical asset resolution surface', () => {
     expect(outputs).toEqual(cases.map((item) => item.normalized));
   });
 
+  it('returns supported chains using chain support metadata', () => {
+    const registry = new InMemoryAssetRegistry();
+    registry.upsert(usdc);
+
+    expect(registry.listSupportedChains(usdc.asset_id)).toEqual(usdc.chain_support);
+  });
+
   it('resolves by canonical APIs and reports support by chain', () => {
     const registry = new InMemoryAssetRegistry();
     registry.upsert(usdc);
@@ -201,6 +276,132 @@ describe('erc-4337 compatibility surface', () => {
         denied_sponsors: ['sponsor:blocked'],
         required_context_flags: ['kyc_passed']
       }
+    });
+  });
+
+  describe('rfc-0018 metadata extensions', () => {
+    it('validates extension bounds and enum constraints', () => {
+      const result = validateAssetDefinition({
+        ...usdc,
+        risk: {
+          risk_class: 'low',
+          risk_tier: 'tier-1',
+          risk_score: 101
+        },
+        collateral: {
+          eligible: true,
+          haircut_bps: -1,
+          max_ltv_bps: 9000
+        },
+        chain_support: [
+          ...usdc.chain_support!,
+          {
+            chain_id: '1',
+            contract_address: '0x0000000000000000000000000000000000000001',
+            deploy_status: 'supported',
+            settlement_supported: true,
+            finality_profile: 'probabilistic'
+          }
+        ]
+      });
+
+      expect(result.valid).toBe(false);
+      expect(result.errors).toContain('risk.risk_score must be between 0 and 100');
+      expect(result.errors).toContain('collateral.haircut_bps must be non-negative');
+      expect(result.errors).toContain('chain_support[].chain_id must be unique per asset');
+    });
+
+    it('filters assets by collateral, margin, privacy and confidential compute metadata', () => {
+      const registry = new InMemoryAssetRegistry();
+      registry.upsert(usdc);
+      registry.upsert({
+        ...usdc,
+        asset_id: 'asset:crypto:eth:ethereum',
+        symbol: 'ETH',
+        name: 'Ether',
+        contract_address: '0x000000000000000000000000000000000000eeee',
+        collateral: {
+          eligible: false,
+          haircut_bps: 1500,
+          max_ltv_bps: 6000
+        },
+        margin: {
+          eligible: false,
+          max_leverage: 2,
+          initial_margin_bps: 5000,
+          maintenance_margin_bps: 2500,
+          liquidation_threshold_bps: 2200
+        },
+        privacy: {
+          privacy_enabled: false,
+          supported_modes: ['public'],
+          default_mode: 'public'
+        },
+        confidential_compute: {
+          supported: false,
+          provider_compatibility: []
+        },
+        chain_support: [
+          {
+            chain_id: '1',
+            contract_address: '0x000000000000000000000000000000000000eeee',
+            deploy_status: 'supported',
+            settlement_supported: true,
+            finality_profile: 'probabilistic'
+          }
+        ]
+      });
+
+      expect(registry.listByCollateralEligibility(true).map((asset) => asset.asset_id)).toEqual([usdc.asset_id]);
+      expect(registry.listByMarginEligibility(true).map((asset) => asset.asset_id)).toEqual([usdc.asset_id]);
+      expect(
+        registry.listByPrivacyCapability({ mode: 'shielded', confidential_compute_supported: true }).map((asset) => asset.asset_id)
+      ).toEqual([usdc.asset_id]);
+    });
+
+    it('returns deterministic oracle source profile and fallback selection', () => {
+      const registry = new InMemoryAssetRegistry();
+      registry.upsert(usdc);
+
+      expect(registry.getOracleSourceProfile(usdc.asset_id)).toEqual(usdc.oracle);
+      expect(registry.selectOracleSource(usdc.asset_id)?.source_id).toBe('oracle:chainlink:usdc-usd');
+      expect(registry.selectOracleSource(usdc.asset_id, ['oracle:pyth:usdc-usd'])?.source_id).toBe(
+        'oracle:pyth:usdc-usd'
+      );
+    });
+
+    it('remains backward compatible with legacy asset records', () => {
+      const registry = new InMemoryAssetRegistry();
+      const legacyAsset: AssetDefinition = {
+        asset_id: 'asset:stablecoin:legacy:ethereum',
+        reference_id: 'ref:asset:stablecoin:legacy:ethereum',
+        correlation_id: 'corr:asset-registry:onboard:legacy',
+        policy_version: 'policy.asset-registry.2026-07',
+        symbol: 'LUSDC',
+        name: 'Legacy USDC',
+        asset_class: 'stablecoin',
+        issuer: 'Circle',
+        chain_id: '1',
+        contract_address: '0x0000000000000000000000000000000000000aaa',
+        decimals: 6,
+        liquidity_tier: 'tier-1',
+        risk_weight: 'TBD by governance/policy',
+        settlement_constraints: 'TBD by governance/policy',
+        status: 'active',
+        version: '1.0.0'
+      };
+
+      expect(validateAssetDefinition(legacyAsset).valid).toBe(true);
+      registry.upsert(legacyAsset);
+      expect(registry.listSupportedChains(legacyAsset.asset_id)).toEqual([
+        {
+          chain_id: '1',
+          contract_address: '0x0000000000000000000000000000000000000aaa',
+          deploy_status: 'supported',
+          settlement_supported: true,
+          finality_profile: 'probabilistic'
+        }
+      ]);
     });
   });
 
